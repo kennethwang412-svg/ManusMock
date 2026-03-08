@@ -1,0 +1,11 @@
+# Python
+backend/venv/
+backend/__pycache__/
+*.pyc
+*.pyo
+
+# Recorded videos (large files)
+backend/static/videos/
+
+# Config with API keys
+backend/config.yaml

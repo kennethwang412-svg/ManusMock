@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpenManus AI</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+</head>
+<body>
+  <div id="app">
+    <!-- 左侧任务列表 -->
+    <aside class="sidebar" :class="{ collapsed: sidebarCollapsed }">
+      <div class="sidebar-header">
+        <div class="logo" v-show="!sidebarCollapsed">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+            <path d="M2 17l10 5 10-5"/>
+            <path d="M2 12l10 5 10-5"/>
+          </svg>
+          <span class="logo-text">OpenManus</span>
+        </div>
+        <button class="btn-icon sidebar-toggle" @click="sidebarCollapsed = !sidebarCollapsed" aria-label="切换侧边栏">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="3" y1="12" x2="21" y2="12"/>
+            <line x1="3" y1="6" x2="21" y2="6"/>
+            <line x1="3" y1="18" x2="21" y2="18"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="sidebar-content" v-show="!sidebarCollapsed">
+        <button class="btn-new-task" @click="createNewTask">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"/>
+            <line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          新建任务
+        </button>
+
+        <div class="task-list">
+          <div
+            v-for="task in tasks"
+            :key="task.id"
+            class="task-item"
+            :class="{ active: currentTask?.id === task.id }"
+            @click="switchTask(task)"
+          >
+            <div class="task-icon" :class="'status-' + task.status">
+              <svg v-if="task.status === 'completed'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+              <svg v-else-if="task.status === 'running'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="spin">
+                <path d="M21 12a9 9 0 11-6.219-8.56"/>
+              </svg>
+              <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+              </svg>
+            </div>
+            <div class="task-info">
+              <span class="task-title">{{ task.title }}</span>
+              <span class="task-time">{{ task.time }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- 中间聊天区域 -->
+    <main class="chat-area">
+      <div class="chat-header">
+        <div class="chat-header-left">
+          <h2 v-if="currentTask">{{ currentTask.title }}</h2>
+          <h2 v-else>OpenManus AI</h2>
+          <span class="status-badge" v-if="currentTask" :class="'badge-' + currentTask.status">
+            {{ statusText(currentTask.status) }}
+          </span>
+        </div>
+        <div class="chat-header-right">
+          <button class="btn-sandbox-toggle" @click="toggleSandbox" v-if="sandboxVideos.length" :class="{ active: sandboxOpen }">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+              <line x1="8" y1="21" x2="16" y2="21"/>
+              <line x1="12" y1="17" x2="12" y2="21"/>
+            </svg>
+            <span>OpenManus 的电脑</span>
+            <span class="sandbox-badge">{{ sandboxVideos.length }}</span>
+          </button>
+          <button class="btn-icon" @click="toggleSteps" v-if="currentTask?.steps?.length" aria-label="查看步骤">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+              <polyline points="10 9 9 9 8 9"/>
+            </svg>
+          </button>
+          <button class="btn-theme-toggle" @click="toggleTheme" :aria-label="isDark ? '切换到白天模式' : '切换到夜间模式'">
+            <svg v-if="!isDark" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
+            </svg>
+            <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="5"/>
+              <line x1="12" y1="1" x2="12" y2="3"/>
+              <line x1="12" y1="21" x2="12" y2="23"/>
+              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+              <line x1="1" y1="12" x2="3" y2="12"/>
+              <line x1="21" y1="12" x2="23" y2="12"/>
+              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- 步骤进度条 -->
+      <div class="steps-bar" v-if="showSteps && currentTask?.steps?.length">
+        <div class="steps-container">
+          <div
+            v-for="(step, index) in currentTask.steps"
+            :key="index"
+            class="step-item"
+            :class="{ done: step.done, current: step.current }"
+          >
+            <div class="step-dot">
+              <svg v-if="step.done" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+              <span v-else>{{ index + 1 }}</span>
+            </div>
+            <span class="step-label">{{ step.label }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 消息列表 -->
+      <div class="messages-container" ref="messagesContainer">
+        <div class="messages-inner">
+          <div v-if="!currentMessages.length" class="empty-state">
+            <div class="empty-icon">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                <path d="M2 17l10 5 10-5"/>
+                <path d="M2 12l10 5 10-5"/>
+              </svg>
+            </div>
+            <h3>你好，我是 OpenManus</h3>
+            <p>我可以帮你完成各种任务，包括搜索信息、编写代码、创建文件等。</p>
+            <div class="quick-actions">
+              <button class="quick-action" @click="sendQuickMessage('帮我写一个Python爬虫脚本')">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="16 18 22 12 16 6"/>
+                  <polyline points="8 6 2 12 8 18"/>
+                </svg>
+                编写代码
+              </button>
+              <button class="quick-action" @click="sendQuickMessage('帮我搜索最新的AI技术趋势')">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="11" cy="11" r="8"/>
+                  <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+                搜索信息
+              </button>
+              <button class="quick-action" @click="sendQuickMessage('帮我生成一份项目报告')">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                </svg>
+                生成文件
+              </button>
+            </div>
+          </div>
+
+          <div
+            v-for="msg in currentMessages"
+            :key="msg.id"
+            class="message"
+            :class="'message-' + msg.role"
+          >
+            <div class="message-avatar" v-if="msg.role === 'assistant'">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                <path d="M2 17l10 5 10-5"/>
+                <path d="M2 12l10 5 10-5"/>
+              </svg>
+            </div>
+            <div class="message-content">
+              <!-- 执行回溯折叠区 -->
+              <div class="execution-log-block" v-if="msg.executionLog?.length">
+                <button class="execution-log-toggle" @click="toggleExecutionLog(msg)">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M9 11l3 3L22 4"/>
+                    <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+                  </svg>
+                  <span>执行回溯</span>
+                  <span class="log-count">{{ msg.executionLog.length }} 个子任务</span>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" :class="{ rotated: msg.executionLogExpanded }">
+                    <polyline points="6 9 12 15 18 9"/>
+                  </svg>
+                </button>
+                <div class="execution-log-content" v-show="msg.executionLogExpanded">
+                  <div v-for="log in msg.executionLog" :key="log.id" class="log-item">
+                    <div class="log-item-header">
+                      <span class="log-step-badge">步骤 {{ log.id }}</span>
+                      <span class="log-tool-badge" :class="'tool-' + (log.tool === 'none' ? 'none' : 'active')">{{ getToolLabel(log.tool) }}</span>
+                    </div>
+                    <div class="log-description">{{ log.description }}</div>
+                    <div class="log-thought" v-if="log.thought">{{ log.thought }}</div>
+                    <div class="log-result-preview" v-if="log.result_preview">
+                      <span class="log-result-label">结果预览：</span>{{ log.result_preview }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 思考过程折叠区 -->
+              <div class="reasoning-block" v-if="msg.reasoning">
+                <button class="reasoning-toggle" @click="toggleReasoning(msg)">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="M12 16v-4"/>
+                    <path d="M12 8h.01"/>
+                  </svg>
+                  <span>思考过程</span>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" :class="{ rotated: msg.reasoningExpanded }">
+                    <polyline points="6 9 12 15 18 9"/>
+                  </svg>
+                </button>
+                <div class="reasoning-content" v-show="msg.reasoningExpanded" v-html="formatMessage(msg.reasoning)"></div>
+              </div>
+
+              <div class="message-text" v-html="formatMessage(msg.content)"></div>
+
+              <!-- 提取的代码文件 -->
+              <div class="message-files" v-if="msg.files?.length">
+                <div
+                  v-for="file in msg.files"
+                  :key="file.name"
+                  class="file-card"
+                  @click="openFilePanel(file)"
+                >
+                  <div class="file-icon">
+                    <span class="file-lang-badge">{{ getLangLabel(file.lang) }}</span>
+                  </div>
+                  <div class="file-info">
+                    <span class="file-name">{{ file.name }}</span>
+                    <span class="file-size">{{ file.size }}</span>
+                  </div>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="file-arrow">
+                    <polyline points="9 18 15 12 9 6"/>
+                  </svg>
+                </div>
+              </div>
+              <span class="message-time">{{ msg.time }}</span>
+            </div>
+          </div>
+
+          <!-- AI 工作状态 -->
+          <div class="message message-assistant" v-if="isTyping">
+            <div class="message-avatar">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                <path d="M2 17l10 5 10-5"/>
+                <path d="M2 12l10 5 10-5"/>
+              </svg>
+            </div>
+            <div class="message-content">
+              <!-- 规划中 -->
+              <div class="planning-indicator" v-if="statusPhase === 'planning'">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="planning-icon">
+                  <circle cx="12" cy="12" r="10"/>
+                  <path d="M12 6v6l4 2"/>
+                </svg>
+                <span class="planning-text">规划中</span>
+                <span class="planning-dots">
+                  <span class="dot">.</span><span class="dot">.</span><span class="dot">.</span>
+                </span>
+              </div>
+
+              <!-- 规划完成提示 -->
+              <div class="planning-indicator planned-indicator" v-if="statusPhase === 'planned'">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M9 11l3 3L22 4"/>
+                  <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+                </svg>
+                <span class="planning-text">规划完成，准备执行</span>
+                <span class="planning-dots">
+                  <span class="dot">.</span><span class="dot">.</span><span class="dot">.</span>
+                </span>
+              </div>
+
+              <!-- TODO 清单 -->
+              <div class="todo-card" v-if="todoList.length && statusPhase !== 'planning'">
+                <div class="todo-header">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M9 11l3 3L22 4"/>
+                    <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+                  </svg>
+                  <span>执行计划</span>
+                </div>
+                <div class="todo-list">
+                  <div
+                    v-for="todo in todoList"
+                    :key="todo.id"
+                    class="todo-item"
+                    :class="'todo-' + todo.status"
+                  >
+                    <div class="todo-checkbox">
+                      <svg v-if="todo.status === 'done'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="20 6 9 17 4 12"/>
+                      </svg>
+                      <svg v-else-if="todo.status === 'running'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="spin">
+                        <path d="M21 12a9 9 0 11-6.219-8.56"/>
+                      </svg>
+                    </div>
+                    <span class="todo-text">{{ todo.description }}</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 生成回复中 -->
+              <div class="planning-indicator" v-if="statusPhase === 'answering'">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="planning-icon">
+                  <circle cx="12" cy="12" r="10"/>
+                  <path d="M12 6v6l4 2"/>
+                </svg>
+                <span class="planning-text">生成回复中</span>
+                <span class="planning-dots">
+                  <span class="dot">.</span><span class="dot">.</span><span class="dot">.</span>
+                </span>
+              </div>
+
+              <!-- 校验优化中 -->
+              <div class="planning-indicator" v-if="statusPhase === 'verifying'">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="planning-icon">
+                  <path d="M9 11l3 3L22 4"/>
+                  <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+                </svg>
+                <span class="planning-text">校验优化中</span>
+                <span class="planning-dots">
+                  <span class="dot">.</span><span class="dot">.</span><span class="dot">.</span>
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 输入区域 -->
+      <div class="input-area">
+        <div class="input-wrapper">
+          <textarea
+            v-model="inputText"
+            @keydown.enter.exact="handleEnter"
+            placeholder="输入你的任务描述..."
+            rows="1"
+            ref="inputRef"
+          ></textarea>
+          <button
+            class="btn-send"
+            @click="sendMessage"
+            :disabled="!inputText.trim() || isTyping"
+            aria-label="发送消息"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13"/>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+            </svg>
+          </button>
+        </div>
+        <p class="input-hint">OpenManus 可能会产生错误，请核实重要信息。</p>
+      </div>
+    </main>
+
+    <!-- 右侧 Sandbox 面板 -->
+    <aside class="sandbox-panel" :class="{ open: sandboxOpen }">
+      <div class="sandbox-panel-header">
+        <div class="sandbox-panel-title">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+            <line x1="8" y1="21" x2="16" y2="21"/>
+            <line x1="12" y1="17" x2="12" y2="21"/>
+          </svg>
+          <span>OpenManus 的电脑</span>
+          <span class="sandbox-video-count" v-if="sandboxVideos.length">{{ sandboxVideos.length }} 个录屏</span>
+        </div>
+        <button class="btn-icon" @click="closeSandbox" aria-label="关闭面板">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="sandbox-body" v-if="sandboxVideos.length">
+        <template v-for="(group, gIdx) in videoGroups" :key="'g'+group.round">
+          <div class="sandbox-round-group">
+            <!-- 多轮时显示分组标题 -->
+            <div class="sandbox-round-header" v-if="hasMultipleRounds" @click="toggleRoundCollapse(group.round)">
+              <div class="sandbox-round-title">
+                <span class="round-question" :title="group.question">{{ group.question }}</span>
+                <span class="round-count">{{ group.videos.length }}个录屏</span>
+              </div>
+              <button class="sandbox-round-toggle" :class="{ collapsed: !isRoundExpanded(group.round) }">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="6 9 12 15 18 9"/>
+                </svg>
+              </button>
+            </div>
+            <!-- 展开内容：标签 + 视频 -->
+            <div class="sandbox-round-content" :class="{ collapsed: hasMultipleRounds && !isRoundExpanded(group.round) }">
+              <div class="sandbox-round-tabs" v-if="group.videos.length > 1 || hasMultipleRounds">
+                <button
+                  v-for="vid in group.videos"
+                  :key="vid.task_id + '-' + vid.round"
+                  class="sandbox-tab"
+                  :class="{ active: sandboxVideos.indexOf(vid) === activeSandboxIndex }"
+                  @click="switchSandboxVideo(sandboxVideos.indexOf(vid))"
+                  :title="vid.description"
+                >
+                  <span class="sandbox-tab-num">{{ vid.task_id }}</span>
+                  <span class="sandbox-tab-text">{{ vid.description }}</span>
+                </button>
+              </div>
+              <div class="sandbox-round-video" v-if="group.videos.some(v => sandboxVideos.indexOf(v) === activeSandboxIndex) || (!hasMultipleRounds && activeSandboxVideo)">
+                <div class="sandbox-video-wrapper">
+                  <video
+                    :key="activeSandboxVideo?.url"
+                    :src="activeSandboxVideo?.url"
+                    controls
+                    autoplay
+                    class="sandbox-video"
+                    v-if="group.videos.some(v => sandboxVideos.indexOf(v) === activeSandboxIndex)"
+                  ></video>
+                </div>
+                <div class="sandbox-video-desc" v-if="activeSandboxVideo && group.videos.some(v => sandboxVideos.indexOf(v) === activeSandboxIndex)">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="M12 16v-4"/>
+                    <path d="M12 8h.01"/>
+                  </svg>
+                  <span>步骤 {{ activeSandboxVideo.task_id }}：{{ activeSandboxVideo.description }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <div class="sandbox-empty" v-if="!sandboxVideos.length">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+          <line x1="8" y1="21" x2="16" y2="21"/>
+          <line x1="12" y1="17" x2="12" y2="21"/>
+        </svg>
+        <p>暂无录屏视频</p>
+        <p class="sandbox-empty-hint">当 OpenManus 使用浏览器搜索时，录屏将自动出现在这里</p>
+      </div>
+    </aside>
+
+    <!-- 右侧文件面板 -->
+    <div class="file-panel-overlay" :class="{ visible: filePanelOpen }" @click="closeFilePanel"></div>
+    <aside class="file-panel" :class="{ open: filePanelOpen }">
+      <div class="file-panel-header">
+        <div class="file-panel-title">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+          </svg>
+          <span>{{ activeFile?.name }}</span>
+          <span class="file-panel-lang" v-if="activeFile?.lang">{{ getLangLabel(activeFile.lang) }}</span>
+        </div>
+        <div class="file-panel-actions">
+          <button class="btn-copy" @click="copyFileContent" :class="{ copied: copySuccess }">
+            <svg v-if="!copySuccess" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+              <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+            </svg>
+            <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+            <span>{{ copySuccess ? '已复制' : '复制' }}</span>
+          </button>
+          <button class="btn-icon" @click="closeFilePanel" aria-label="关闭面板">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="file-panel-content">
+        <pre v-if="activeFile"><code>{{ activeFile?.content }}</code></pre>
+      </div>
+    </aside>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
